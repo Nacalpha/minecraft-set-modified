@@ -3,6 +3,7 @@ import modConfig
 import random
 import copy
 import mod.client.extraClientApi as clientApi
+import setting_shim
 
 ClientSystem = clientApi.GetClientSystemCls()
 
@@ -15,7 +16,7 @@ _COLOR_MARKER = u'\u00a7'.encode('utf-8')
 try:
     _STRING_TYPES = (unicode, str)
 except NameError:  # 兼容 Python 3，方便离线跑语法检查
-    _STRING_TYPES = (str,)
+    _STRING_TYPES = (str, )
 
 
 def _ToComparableText(value):
@@ -38,7 +39,7 @@ def _StripColorCode(text):
     if not text or not isinstance(text, (str, bytes)):
         return text
     if isinstance(text, bytes):
-        marker = _COLOR_MARKER          # Python 2 的 str 就是字节串
+        marker = _COLOR_MARKER  # Python 2 的 str 就是字节串
     else:
         marker = u'\u00a7'
     if marker not in text:
@@ -48,7 +49,7 @@ def _StripColorCode(text):
     length = len(text)
     while i < length:
         if text[i:i + 2] == marker:
-            i += 3      # § 自身两字节，再跳过后面那个格式符
+            i += 3  # § 自身两字节，再跳过后面那个格式符
             continue
         out.append(text[i:i + 1])
         i += 1
@@ -720,9 +721,9 @@ class set_nacalset2cl(ClientSystem):
                                       ['save_place']][i] = copy.deepcopy(data)
                 self.save_data(self.hdt_data[i]['save_place'], self.mod_id)
                 self.set_ui()
-                self._notify_setting_changed(
-                    self.mod_id, self.class_id, i,
-                    self.hdt_data[i]['save_place'], data, 'ui')
+                self._notify_setting_changed(self.mod_id, self.class_id, i,
+                                             self.hdt_data[i]['save_place'],
+                                             data, 'ui')
             if self.hdt_data[i]['bl_num'] != bl_num and self.world_state[
                     'op'] >= self.hdt_data[i]['op']:
                 self.hdt_data[i]['bl_num'] = bl_num
@@ -950,8 +951,8 @@ class set_nacalset2cl(ClientSystem):
         self.uiNode1 = None
 
     # def gb3(self):
-        # comp = clientApi.GetEngineCompFactory().CreateGame(self.levelid)
-        # comp.SimulateTouchWithMouse(False)
+    # comp = clientApi.GetEngineCompFactory().CreateGame(self.levelid)
+    # comp.SimulateTouchWithMouse(False)
 
     def OnKeyPressInGame(self, args):
         if args['isDown'] == '1' and args['key'] == '27':
@@ -996,6 +997,7 @@ class set_nacalset2cl(ClientSystem):
             if control is None:
                 return False
             content = control.asScrollView().GetScrollViewContentPath()
+            print("[设置] 取滚动列表路径成功：%s" % content)
         except Exception as e:
             print("[设置] 取滚动列表路径失败：%s" % e)
             return False
@@ -1051,6 +1053,60 @@ class set_nacalset2cl(ClientSystem):
             if data:
                 out.update(copy.deepcopy(data))
         return out
+
+    def RegisterModSetting(self, mod_id, setdic):
+        """客户端直接登记一份设置表，不需要服务端转发。
+
+        给「原来是官方设置界面、现在改成本模块」的模组用：那些模组的设置项
+        全是客户端本地的（client_local / client_player），没有必要绕服务端。
+        server_player / server_world 两个存储位在这条路上不会生效。
+
+        :param mod_id: 设置表里的 mod_id，同时也是模组注册名（按钮事件要用它取系统）
+        :param setdic: 设置表，格式和 reload_set_data 收到的一样
+        :return: bool
+        """
+        if not mod_id or not setdic or 'set_class' not in setdic:
+            print("[设置] 设置表不完整，登记被忽略：%s" % mod_id)
+            return False
+        comp = clientApi.GetEngineCompFactory().CreateConfigClient(
+            self.levelid)
+        self.mod[mod_id] = setdic
+        self.set[mod_id] = {
+            'client_local': comp.GetConfigData("mod_" + mod_id + "_set", True)
+            or {},
+            'client_player':
+            comp.GetConfigData("mod_" + mod_id + "_set", False) or {},
+            'server_player': {},
+            'server_world': {},
+        }
+        # 缺的键补默认值，缺的存储位补空字典
+        for class_id in setdic['set_class']:
+            for set_id in setdic['set_class'][class_id]['set_list']:
+                item = setdic['set_class'][class_id]['set_list'][set_id]
+                place = item.get('save_place')
+                if not place:
+                    continue
+                bucket = self.set[mod_id].get(place)
+                if bucket is None:
+                    bucket = {}
+                    self.set[mod_id][place] = bucket
+                if set_id not in bucket:
+                    bucket[set_id] = copy.deepcopy(item.get('default_data'))
+        self.save_data('client_local', mod_id)
+        self.save_data('client_player', mod_id)
+        return True
+
+    def CreateSettingShim(self,
+                          mod_id,
+                          mod_name,
+                          class_image,
+                          client_system_name,
+                          slider_callback=None,
+                          dropdown_callback=None):
+        """建一个模拟官方 SettingInst 的适配器，见 setting_shim.py"""
+        return setting_shim.SettingShim(self, mod_id, mod_name, class_image,
+                                        client_system_name, slider_callback,
+                                        dropdown_callback)
 
     def NormalizeNumber(self, item, value):
         """范围数字：夹进 [min, max]，按 step 对齐，再按 handle 转型。
@@ -1110,7 +1166,8 @@ class set_nacalset2cl(ClientSystem):
             plain = _StripColorCode(text)
             if plain:
                 for key in order:
-                    if _StripColorCode(_ToComparableText(data.get(key))) == plain:
+                    if _StripColorCode(_ToComparableText(
+                            data.get(key))) == plain:
                         return key
         if isinstance(value, int) and not isinstance(value, bool):
             if 0 <= value < len(order):
@@ -1154,8 +1211,15 @@ class set_nacalset2cl(ClientSystem):
         # Button / Label 没有可写的数据
         return None
 
-    def _apply_value(self, mod_id, class_id, set_id, item, value, source,
-                     save=True, refresh=True):
+    def _apply_value(self,
+                     mod_id,
+                     class_id,
+                     set_id,
+                     item,
+                     value,
+                     source,
+                     save=True,
+                     refresh=True):
         """底层写入，value 必须已经是合法的存储值"""
         save_place = item.get('save_place')
         if not save_place:
@@ -1199,8 +1263,14 @@ class set_nacalset2cl(ClientSystem):
         if new_value is None:
             print("[设置] 设置项 %s 的值不合法：%s" % (set_id, str(value)))
             return False
-        return self._apply_value(mod_id, class_id, set_id, item, new_value,
-                                 source, save=True, refresh=refresh)
+        return self._apply_value(mod_id,
+                                 class_id,
+                                 set_id,
+                                 item,
+                                 new_value,
+                                 source,
+                                 save=True,
+                                 refresh=refresh)
 
     def ApplySettingsDict(self, mod_id, settings, source='preset'):
         """批量写。全部写完后统一重画一次，避免每写一项就整页重画。
@@ -1212,14 +1282,16 @@ class set_nacalset2cl(ClientSystem):
             return False
         applied = []
         for set_id in settings:
-            if self.SetSetting(mod_id, set_id, settings[set_id],
-                               source=source, refresh=False):
+            if self.SetSetting(mod_id,
+                               set_id,
+                               settings[set_id],
+                               source=source,
+                               refresh=False):
                 applied.append(set_id)
         if not applied:
             return False
         self.RefreshSettingUI(mod_id)
-        print("[设置] 模组 %s 批量写入 %d 项：%s" % (mod_id, len(applied),
-                                              str(applied)))
+        print("[设置] 模组 %s 批量写入 %d 项：%s" % (mod_id, len(applied), str(applied)))
         return True
 
     def ResetClassSettings(self, mod_id, class_id):
@@ -1242,8 +1314,13 @@ class set_nacalset2cl(ClientSystem):
                 continue
             # 默认值直接写，不经过 NormalizeSettingValue：那里会按 handle 改
             # 数值类型，重置应该跟原来一模一样
-            if self._apply_value(mod_id, class_id, set_id, item,
-                                 item['default_data'], 'reset', save=False,
+            if self._apply_value(mod_id,
+                                 class_id,
+                                 set_id,
+                                 item,
+                                 item['default_data'],
+                                 'reset',
+                                 save=False,
                                  refresh=False):
                 place = item.get('save_place')
                 if place not in places:
