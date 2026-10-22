@@ -6,11 +6,74 @@ import mod.client.extraClientApi as clientApi
 
 ClientSystem = clientApi.GetClientSystemCls()
 
+# 区分“字典里没有这个键”和“值是 None”这两种情况
+_MISSING = object()
 
-class set_nacalgunguncl(ClientSystem):
+# § 的 utf-8 字节。颜色码处理都在这上面做，避免 str/unicode 混用
+_COLOR_MARKER = u'\u00a7'.encode('utf-8')
+
+try:
+    _STRING_TYPES = (unicode, str)
+except NameError:  # 兼容 Python 3，方便离线跑语法检查
+    _STRING_TYPES = (str,)
+
+
+def _ToComparableText(value):
+    """str 统一转成 utf-8 字节串，方便和 unicode 比较。
+    不是字符串返回 None
+    """
+    if isinstance(value, unicode):
+        return value.encode('utf-8')
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _StripColorCode(text):
+    """去掉 §x 这类颜色/样式码，text 是 _ToComparableText 出来的 utf-8 字节串。
+
+    设置表里的显示文字经常写成 "§l关闭开火按钮"，玩家看到的是去掉码之后的样子，
+    所以按显示文字匹配时要再比一次去码版本。
+    """
+    if not text or not isinstance(text, (str, bytes)):
+        return text
+    if isinstance(text, bytes):
+        marker = _COLOR_MARKER          # Python 2 的 str 就是字节串
+    else:
+        marker = u'\u00a7'
+    if marker not in text:
+        return text
+    out = []
+    i = 0
+    length = len(text)
+    while i < length:
+        if text[i:i + 2] == marker:
+            i += 3      # § 自身两字节，再跳过后面那个格式符
+            continue
+        out.append(text[i:i + 1])
+        i += 1
+    return text[0:0].join(out)
+
+
+def _SameKey(a, b):
+    """比较两个可能当字典 key 的值。允许 str 与 unicode 互相比，
+    bool 只跟 bool 比（避免 True 和 1 混掉）
+    """
+    if a is b:
+        return True
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    ta = _ToComparableText(a)
+    tb = _ToComparableText(b)
+    if ta is not None and tb is not None:
+        return ta == tb
+    return type(a) is type(b) and a == b
+
+
+class set_nacalset2cl(ClientSystem):
 
     def __init__(self, namespace, systemName):
-        super(set_nacalgunguncl, self).__init__(namespace, systemName)
+        super(set_nacalset2cl, self).__init__(namespace, systemName)
         self.ListenEvent()
         self.levelid = clientApi.GetLevelId()
         self.pid = clientApi.GetLocalPlayerId()
@@ -22,12 +85,20 @@ class set_nacalgunguncl(ClientSystem):
         self.srk_data = {}
         self.hdt_data = {}
         self.uiNode1 = None
+        # 当前打开的分类，没打开时为 None。外部改设置时靠它判断要不要重画
+        self.mod_id = None
+        self.class_id = None
+        # 玩家权限等级由服务端每 0.5 秒推一次，没收到之前先按 0 处理
+        self.world_state = {'op': 0}
+        # 设置项变更回调表：{mod_id: [callback, ...]}，见 AddSettingChangeListener
+        self.setting_listeners = {}
         if clientApi.GetPlatform() == 0:
             self.sta = 'stack_'
             self.stb = 'mouse'
         else:
             self.sta = ''
             self.stb = 'touch'
+        # 兜底用的路径，正常情况会被 RefreshScrollPath() 向引擎查到的结果覆盖
         self.stc = '/scroll_' + self.stb + '/scroll_view/' + self.sta + 'panel/background_and_viewport/scrolling_view_port/scrolling_content'
 
     #函数回调
@@ -71,6 +142,7 @@ class set_nacalgunguncl(ClientSystem):
         else:
             self.sta = ''
             self.stb = 'touch'
+        # 兜底用的路径，正常情况会被 RefreshScrollPath() 向引擎查到的结果覆盖
         self.stc = '/scroll_' + self.stb + '/scroll_view/' + self.sta + 'panel/background_and_viewport/scrolling_view_port/scrolling_content'
 
         comp = clientApi.GetEngineCompFactory().CreateGame(self.levelid)
@@ -81,6 +153,7 @@ class set_nacalgunguncl(ClientSystem):
                                        modConfig.TemplateUIName)
 
     def ddk(self):
+        self.RefreshScrollPath()
         if clientApi.GetPlatform() == 0:
             self.uiNode1.GetBaseUIControl("/panel").SetFullSize(
                 "x", {
@@ -129,6 +202,7 @@ class set_nacalgunguncl(ClientSystem):
         buttonControl.SetButtonTouchUpCallback(self.gb_ui)
 
     def set_ui(self):
+        self.RefreshScrollPath()
         for ii in self.mod[self.mod_id]['set_class'][
                 self.class_id]['set_list']:
             dic = self.mod[self.mod_id]['set_class'][
@@ -328,6 +402,7 @@ class set_nacalgunguncl(ClientSystem):
             }})
 
     def class_button(self, args):
+        self.RefreshScrollPath()
         bu = args['AddTouchEventParams']
         self.mod_id = bu['mod_id']
         self.class_id = bu['class_id']
@@ -597,6 +672,7 @@ class set_nacalgunguncl(ClientSystem):
         self.set_ui()
 
     def get_hdt_data(self):
+        self.RefreshScrollPath()
         for i in self.hdt_data:
             num = self.uiNode1.GetBaseUIControl(
                 '/panel/image(0)/image(1)(0)/scroll_view' + self.stc + '/' +
@@ -604,17 +680,24 @@ class set_nacalgunguncl(ClientSystem):
             bl_num = copy.deepcopy(num)
             data = 0
             if self.hdt_data[i]['data_type'] == 'range_number':
-                derta = self.hdt_data[i]['max'] - self.hdt_data[i]['min']
-                derta *= num
-                num = self.hdt_data[i]['min'] + derta
-                if self.hdt_data[i]['step'] > 0:
-                    num2 = num // self.hdt_data[i]['step']
-                    if num % self.hdt_data[i]['step'] >= self.hdt_data[i][
-                            'step'] / 2.0:
-                        num2 += 1
-                    num = num2 * self.hdt_data[i]['step']
+                low = self.hdt_data[i]['min']
+                high = self.hdt_data[i]['max']
+                # 显式转浮点：GetSliderValue 万一是整数，下面的除法在
+                # Python 2 里会变成整除
+                num = float(low) + float(high - low) * num
+                step = self.hdt_data[i]['step']
+                if step > 0:
+                    # 按 (读数 - 下限) / 步长 取整，不能直接用读数除步长：
+                    # 下限不是步长整数倍时会整体偏一格，浮点余数判断还会把
+                    # 0.9 抬成 1.0000000000000002 这种越界值
+                    num = low + round((num - low) / step) * step
+                num = round(num, 6)
+                if num < low:
+                    num = low
+                elif num > high:
+                    num = high
                 if self.hdt_data[i]['handle'] == 'become_int':
-                    num = int(num)
+                    num = int(round(num))
                 elif self.hdt_data[i]['handle'] == 'become_float':
                     num = float(num)
                 data = num
@@ -625,6 +708,10 @@ class set_nacalgunguncl(ClientSystem):
                 if derta % 1 >= 0.5:
                     num2 += 1
                 num = int(num2)
+                if num < 0:
+                    num = 0
+                elif num > len(self.hdt_data[i]['data_order']) - 1:
+                    num = len(self.hdt_data[i]['data_order']) - 1
                 data = self.hdt_data[i]['data_order'][num]
             if self.hdt_data[i]['data'] != data and self.world_state[
                     'op'] >= self.hdt_data[i]['op']:
@@ -633,12 +720,16 @@ class set_nacalgunguncl(ClientSystem):
                                       ['save_place']][i] = copy.deepcopy(data)
                 self.save_data(self.hdt_data[i]['save_place'], self.mod_id)
                 self.set_ui()
+                self._notify_setting_changed(
+                    self.mod_id, self.class_id, i,
+                    self.hdt_data[i]['save_place'], data, 'ui')
             if self.hdt_data[i]['bl_num'] != bl_num and self.world_state[
                     'op'] >= self.hdt_data[i]['op']:
                 self.hdt_data[i]['bl_num'] = bl_num
                 self.hdt_bg = i
 
     def dj_srk(self, args):
+        self.RefreshScrollPath()
         bu = args['AddTouchEventParams']
         if self.world_state['op'] >= bu['op']:
             self.uiNode1.GetBaseUIControl("/panel/button(0)").SetPosition(
@@ -652,6 +743,7 @@ class set_nacalgunguncl(ClientSystem):
             buttonControl.SetButtonTouchUpCallback(self.get_srk_data)
 
     def get_srk_data(self, args):
+        self.RefreshScrollPath()
         bu = args['AddTouchEventParams']
         self.uiNode1.GetBaseUIControl("/panel/button(0)").SetPosition(
             (0, 10000))
@@ -723,6 +815,9 @@ class set_nacalgunguncl(ClientSystem):
                                   ['save_place']][i] = copy.deepcopy(data)
             self.save_data(self.srk_data[i]['save_place'], self.mod_id)
             self.set_ui()
+            self._notify_setting_changed(self.mod_id, self.class_id, i,
+                                         self.srk_data[i]['save_place'], data,
+                                         'ui')
 
     def dj_kg(self, args):
         bu = args['AddTouchEventParams']
@@ -733,6 +828,9 @@ class set_nacalgunguncl(ClientSystem):
                 self.set[bu['mod_id']][bu['save_place']][bu['set_id']] = True
             self.save_data(bu['save_place'], bu['mod_id'])
             self.set_ui()
+            self._notify_setting_changed(
+                bu['mod_id'], bu['class_id'], bu['set_id'], bu['save_place'],
+                self.set[bu['mod_id']][bu['save_place']][bu['set_id']], 'ui')
 
     def dj_button(self, args):
         bu = args['AddTouchEventParams']
@@ -744,29 +842,7 @@ class set_nacalgunguncl(ClientSystem):
                     'player_id': self.pid
                 })
             elif bu['button_type'] == 'reset_class_data':
-                for i in self.mod[bu['mod_id']]['set_class'][
-                        bu['class_id']]['set_list']:
-                    if self.mod[bu['mod_id']]['set_class'][bu['class_id']][
-                            'set_list'][i]['ui_type'] != 'Button' and self.mod[
-                                bu['mod_id']]['set_class'][bu['class_id']][
-                                    'set_list'][i]['ui_type'] != 'Label':
-                        if self.world_state['op'] >= self.mod[bu['mod_id']][
-                                'set_class'][bu['class_id']]['set_list'][i][
-                                    'need_op_level'] and 'default_data' in self.mod[
-                                        bu['mod_id']]['set_class'][
-                                            bu['class_id']]['set_list'][i]:
-                            self.set[bu['mod_id']][
-                                self.mod[bu['mod_id']]['set_class'][
-                                    bu['class_id']]['set_list'][i]
-                                ['save_place']][i] = copy.deepcopy(
-                                    self.mod[bu['mod_id']]['set_class'][
-                                        bu['class_id']]['set_list'][i]
-                                    ['default_data'])
-                self.save_data('client_local', bu['mod_id'])
-                self.save_data('client_player', bu['mod_id'])
-                self.save_data('server_player', bu['mod_id'])
-                self.save_data('server_world', bu['mod_id'])
-                self.set_ui()
+                self.ResetClassSettings(bu['mod_id'], bu['class_id'])
 
     def xlk_xx(self, args):
         bu = args['AddTouchEventParams']
@@ -775,9 +851,13 @@ class set_nacalgunguncl(ClientSystem):
                 bu['set_id']] = bu['xx_id']
             self.save_data(bu['save_place'], bu['mod_id'])
             self.set_ui()
+            self._notify_setting_changed(bu['mod_id'], bu['class_id'],
+                                         bu['set_id'], bu['save_place'],
+                                         bu['xx_id'], 'ui')
         self.qx_xlk(args)
 
     def xlk(self, args):
+        self.RefreshScrollPath()
         bu = args['AddTouchEventParams']
         if self.world_state['op'] >= bu['op']:
             #self.uiNode1.GetBaseUIControl("/panel/image(0)/image(1)(0)/scroll_view").SetTouchEnable(False)
@@ -792,6 +872,7 @@ class set_nacalgunguncl(ClientSystem):
                 bu['set_id'] + '/button/image(0)').SetPosition((0, 0))
 
     def qx_xlk(self, args):
+        self.RefreshScrollPath()
         bu = args['AddTouchEventParams']
         #self.uiNode1.GetBaseUIControl("/panel/image(0)/image(1)(0)/scroll_view").SetTouchEnable(True)
         self.uiNode1.GetBaseUIControl("/panel/button(0)").SetPosition(
@@ -815,6 +896,12 @@ class set_nacalgunguncl(ClientSystem):
             args['l_data']
         }
         self.mod[args['data']['mod_id']] = args['data']
+
+        # GetConfigData / GetExtraData 在没写过数据时可能返回 None，统一成空字典，
+        # 否则后面所有 set[mod_id][save_place][set_id] 的写法都会炸
+        for place in self.set[args['data']['mod_id']]:
+            if self.set[args['data']['mod_id']][place] is None:
+                self.set[args['data']['mod_id']][place] = {}
 
         for i in args['data']['set_class']:
             for ii in args['data']['set_class'][i]['set_list']:
@@ -891,3 +978,336 @@ class set_nacalgunguncl(ClientSystem):
             self.levelid)
         data = comp.GetConfigData("mod_" + mod_id + "_set", True)
         return data
+
+    # 滚动列表（分类列表 / 设置列表 / 下拉框列表）的内容路径后缀。
+    #
+    # scroll_view 的内部结构在触控模式和键鼠模式（F11 可切）下不一样：触控是
+    # /scroll_touch/scroll_view/panel/...，键鼠是 /scroll_mouse/scroll_view/stack_panel/...，
+    # 手柄玩家两者都对不上。所以这段不能自己拼，必须问引擎要。
+    # 引擎给的路径形如 "<控件路径>/scroll_xxx/scroll_view/..."，把控件路径那截去掉，
+    # 剩下的后缀三种滚动列表通用，可以继续往后拼子控件。
+    # 接口调不通时沿用 self.stc 里启动时按平台拼的旧值，不至于整页打不开。
+    def RefreshScrollPath(self):
+        if self.uiNode1 is None:
+            return False
+        base = '/panel/image(0)/image(1)(0)/scroll_view'
+        try:
+            control = self.uiNode1.GetBaseUIControl(base)
+            if control is None:
+                return False
+            content = control.asScrollView().GetScrollViewContentPath()
+        except Exception as e:
+            print("[设置] 取滚动列表路径失败：%s" % e)
+            return False
+        if not content:
+            return False
+        if content.startswith(base):
+            self.stc = content[len(base):]
+            return True
+        # 有些版本直接返回相对路径，形如 /scroll_touch/scroll_view/...
+        if content.startswith('/scroll_'):
+            self.stc = content
+            return True
+        print("[设置] 滚动列表路径格式不认识，继续用旧路径：%s" % content)
+        return False
+
+    # ==================== 对外读写接口 ====================
+    # 供模组内其它脚本读写设置值。取实例：
+    #   setsys = clientApi.GetSystem("set_nacalset2", "set_nacalset2temc")
+
+    def GetSettingInfo(self, mod_id, set_id):
+        """按选项 ID 找出它所属的分类和选项信息字典，返回 (class_id, item)"""
+        mod = self.mod.get(mod_id)
+        if not mod:
+            return None, None
+        for class_id in mod['set_class']:
+            set_list = mod['set_class'][class_id]['set_list']
+            if set_id in set_list:
+                return class_id, set_list[set_id]
+        return None, None
+
+    def GetSetting(self, mod_id, set_id):
+        """读一个设置项的当前值；读不到返回 None"""
+        class_id, item = self.GetSettingInfo(mod_id, set_id)
+        if item is None:
+            return None
+        save_place = item.get('save_place')
+        if not save_place:
+            return None
+        return copy.deepcopy(
+            self.set.get(mod_id, {}).get(save_place, {}).get(set_id))
+
+    def GetSettings(self, mod_id, save_place=None):
+        """读一个模组的全部设置值，返回 {选项ID: 值} 的副本。
+        不传 save_place 就把四个存储位合并成一份
+        """
+        if mod_id not in self.set:
+            return {}
+        if save_place:
+            return copy.deepcopy(self.set[mod_id].get(save_place) or {})
+        out = {}
+        for place in self.set[mod_id]:
+            data = self.set[mod_id][place]
+            if data:
+                out.update(copy.deepcopy(data))
+        return out
+
+    def NormalizeNumber(self, item, value):
+        """范围数字：夹进 [min, max]，按 step 对齐，再按 handle 转型。
+        不合法返回 None
+        """
+        if isinstance(value, bool):
+            return None
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            return None
+        if num != num:  # NaN
+            return None
+        low = item.get('min', 0)
+        high = item.get('max', 0)
+        if num < low:
+            num = low
+        elif num > high:
+            num = high
+        step = item.get('step') or 0
+        if step > 0:
+            # 必须显式转浮点：Python 2 里整数除整数是整除，会先截断再取整，
+            # 比如 min=0、step=5 时 9 会被算成 5
+            num = low + round(float(num - low) / step) * step
+        # 收掉浮点误差，别把 0.30000000000000004 这种值存进去
+        num = round(num, 6)
+        if num > high:
+            num = high
+        if num < low:
+            num = low
+        handle = item.get('handle')
+        if handle == 'become_int':
+            return int(round(num))
+        if handle == 'become_float':
+            return float(num)
+        return num
+
+    def NormalizeChoiceKey(self, item, value):
+        """把可选项换算成 data_order 里的 key。
+        支持三种写法：key 本身、显示文字（data[key] 的值）、整数下标
+        """
+        order = item.get('data_order')
+        if not order:
+            return None
+        data = item.get('data') or {}
+        for key in order:
+            if _SameKey(key, value):
+                return key
+        text = _ToComparableText(value)
+        if text is not None:
+            # 显示文字完全一致
+            for key in order:
+                if _ToComparableText(data.get(key)) == text:
+                    return key
+            # 忽略 § 颜色码再比一次：表里常写成 "§l关闭开火按钮"，
+            # 而调用方拿到的是可见文字
+            plain = _StripColorCode(text)
+            if plain:
+                for key in order:
+                    if _StripColorCode(_ToComparableText(data.get(key))) == plain:
+                        return key
+        if isinstance(value, int) and not isinstance(value, bool):
+            if 0 <= value < len(order):
+                return order[value]
+        return None
+
+    def NormalizeSettingValue(self, item, value):
+        """把外部传进来的值换算成内部存储值；不合法返回 None"""
+        ui_type = item.get('ui_type')
+        data_type = item.get('data_type')
+        if ui_type == 'SwitchToggle' and data_type == 'bool':
+            if isinstance(value, bool):
+                return value
+            text = _ToComparableText(value)
+            if text is not None:
+                low = text.lower()
+                if low in ('1', 'true', 'on'):
+                    return True
+                if low in ('0', 'false', 'off'):
+                    return False
+                return None
+            if isinstance(value, (int, float)):
+                return bool(value)
+            return None
+        if ui_type == 'TextEditBox':
+            if data_type == 'character_string':
+                text = value
+                if not isinstance(text, _STRING_TYPES):
+                    text = str(value)
+                max_length = item.get('max_length')
+                if max_length and len(text) > max_length:
+                    text = text[:max_length]
+                return text
+            return self.NormalizeNumber(item, value)
+        if ui_type == 'Slider':
+            if data_type == 'single_choice':
+                return self.NormalizeChoiceKey(item, value)
+            return self.NormalizeNumber(item, value)
+        if ui_type == 'ComboBoxUIControl':
+            return self.NormalizeChoiceKey(item, value)
+        # Button / Label 没有可写的数据
+        return None
+
+    def _apply_value(self, mod_id, class_id, set_id, item, value, source,
+                     save=True, refresh=True):
+        """底层写入，value 必须已经是合法的存储值"""
+        save_place = item.get('save_place')
+        if not save_place:
+            return False
+        bucket = self.set[mod_id].get(save_place)
+        if bucket is None:
+            bucket = {}
+            self.set[mod_id][save_place] = bucket
+        old_value = bucket.get(set_id, _MISSING)
+        bucket[set_id] = copy.deepcopy(value)
+        # 同步滑条 / 输入框的读数缓存。不同步的话，0.1 秒一次的滑条轮询会把
+        # 还没重画的旧读数当成“玩家拖动了滑条”，再写一遍
+        if set_id in self.hdt_data:
+            self.hdt_data[set_id]['data'] = copy.deepcopy(value)
+        if set_id in self.srk_data:
+            self.srk_data[set_id]['data'] = copy.deepcopy(value)
+        if save:
+            self.save_data(save_place, mod_id)
+        if refresh:
+            self.RefreshSettingUI(mod_id, class_id)
+        if old_value is _MISSING or old_value != value:
+            self._notify_setting_changed(mod_id, class_id, set_id, save_place,
+                                         value, source)
+        return True
+
+    def SetSetting(self, mod_id, set_id, value, source='api', refresh=True):
+        """写一个设置项的值。界面正开在这一页时立刻重画。
+        :return: bool 是否写入成功（找不到选项、值不合法都返回 False）
+        """
+        if mod_id not in self.set or mod_id not in self.mod:
+            print("[设置] 模组 %s 的设置还没注册，写入被忽略" % mod_id)
+            return False
+        class_id, item = self.GetSettingInfo(mod_id, set_id)
+        if item is None:
+            print("[设置] 找不到设置项 %s（模组 %s）" % (set_id, mod_id))
+            return False
+        if not item.get('save_place'):
+            print("[设置] 设置项 %s 不存数据，不能写" % set_id)
+            return False
+        new_value = self.NormalizeSettingValue(item, value)
+        if new_value is None:
+            print("[设置] 设置项 %s 的值不合法：%s" % (set_id, str(value)))
+            return False
+        return self._apply_value(mod_id, class_id, set_id, item, new_value,
+                                 source, save=True, refresh=refresh)
+
+    def ApplySettingsDict(self, mod_id, settings, source='preset'):
+        """批量写。全部写完后统一重画一次，避免每写一项就整页重画。
+        :param settings: {选项ID: 值}
+        :return: bool 是否至少写入了一项
+        """
+        if not settings:
+            print("[设置] 传入的设置字典是空的")
+            return False
+        applied = []
+        for set_id in settings:
+            if self.SetSetting(mod_id, set_id, settings[set_id],
+                               source=source, refresh=False):
+                applied.append(set_id)
+        if not applied:
+            return False
+        self.RefreshSettingUI(mod_id)
+        print("[设置] 模组 %s 批量写入 %d 项：%s" % (mod_id, len(applied),
+                                              str(applied)))
+        return True
+
+    def ResetClassSettings(self, mod_id, class_id):
+        """把一个分类下的选项全部恢复成 default_data。
+        权限不足的跳过，跟界面上的重置按钮行为一致
+        """
+        mod = self.mod.get(mod_id)
+        if not mod or class_id not in mod.get('set_class', {}):
+            return False
+        set_list = mod['set_class'][class_id]['set_list']
+        op = self.world_state.get('op', 0)
+        places = []
+        for set_id in set_list:
+            item = set_list[set_id]
+            if item.get('ui_type') in ('Button', 'Label'):
+                continue
+            if 'default_data' not in item:
+                continue
+            if op < item.get('need_op_level', 0):
+                continue
+            # 默认值直接写，不经过 NormalizeSettingValue：那里会按 handle 改
+            # 数值类型，重置应该跟原来一模一样
+            if self._apply_value(mod_id, class_id, set_id, item,
+                                 item['default_data'], 'reset', save=False,
+                                 refresh=False):
+                place = item.get('save_place')
+                if place not in places:
+                    places.append(place)
+        for place in places:
+            self.save_data(place, mod_id)
+        self.RefreshSettingUI(mod_id, class_id)
+        return len(places) > 0
+
+    def RefreshSettingUI(self, mod_id=None, class_id=None):
+        """重画当前页。界面没开、或者当前看的不是这个模组 / 分类时什么都不做，
+        下次打开会自动渲染成新值
+        """
+        if self.uiNode1 is None:
+            return False
+        if mod_id is not None and mod_id != self.mod_id:
+            return False
+        if class_id is not None and class_id != self.class_id:
+            return False
+        try:
+            self.set_ui()
+        except Exception as e:
+            print("[设置] 刷新界面失败：%s" % e)
+            return False
+        return True
+
+    # ---------- 设置变更回调（可选） ----------
+
+    def AddSettingChangeListener(self, mod_id, callback):
+        """注册设置变更回调。回调收到一个字典：
+        {mod_id, class_id, set_id, save_place, value, source}
+        source 为 'ui'（玩家在界面上改的）、'api'、'preset'、'reset'
+        """
+        if not callable(callback):
+            print("[设置] 回调不是函数，已忽略")
+            return False
+        listeners = self.setting_listeners.setdefault(mod_id, [])
+        if callback not in listeners:
+            listeners.append(callback)
+        return True
+
+    def RemoveSettingChangeListener(self, mod_id, callback):
+        listeners = self.setting_listeners.get(mod_id)
+        if listeners and callback in listeners:
+            listeners.remove(callback)
+            return True
+        return False
+
+    def _notify_setting_changed(self, mod_id, class_id, set_id, save_place,
+                                value, source):
+        """把变更告诉注册过的回调。回调里抛异常不影响设置本身"""
+        listeners = self.setting_listeners.get(mod_id)
+        if not listeners:
+            return
+        payload = {
+            'mod_id': mod_id,
+            'class_id': class_id,
+            'set_id': set_id,
+            'save_place': save_place,
+            'value': copy.deepcopy(value),
+            'source': source
+        }
+        for callback in list(listeners):
+            try:
+                callback(payload)
+            except Exception as e:
+                print("[设置] 设置变更回调出错：%s" % e)

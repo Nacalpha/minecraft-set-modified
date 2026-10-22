@@ -52,12 +52,12 @@
                     "type": "panel",
                     "anchor_from": "top_middle",
                     "anchor_to": "top_middle",
-                    "offset": "@modsetnacalgungun.jr",
+                    "offset": "@modsetnacalset2.jr",
                     "size": [
                         "95.0%+0.0px",
                         "95.0%+0.0px"
                     ],
-                    "alpha": "@modsetnacalgungun.jr2",
+                    "alpha": "@modsetnacalset2.jr2",
                     "propagate_alpha": true,
                     "controls": [
                         {
@@ -136,7 +136,7 @@
                                                         "$scroll_box_touch_image_control": "netease_editor_template_namespace.scroll_box_image",
                                                         "$scroll_track_image_control": "netease_editor_template_namespace.scroll_track_image",
                                                         "$scroll_track_texture": "textures/ui/set_hg",
-                                                        "$scrolling_content": "modsetnacalgungun.gdlb",
+                                                        "$scrolling_content": "modsetnacalset2.gdlb",
                                                         "$show_background": true,
                                                         "$track_nine_slice_buttom": 0,
                                                         "$track_nine_slice_left": 0,
@@ -247,7 +247,7 @@
                                                                     "layer": 200,
                                                                     "clip_direction": "left",
                                                                     "clip_ratio": 0.0,
-                                                                    "texture": "textures/items/custom_apple",
+                                                                    "texture": "textures/ui/xlk_an2",
                                                                     "controls": [
                                                                         {
                                                                             "button_label@netease_editor_template_namespace.button_label": {
@@ -493,7 +493,7 @@
                                                                                             "$scroll_box_touch_image_control": "netease_editor_template_namespace.scroll_box_image",
                                                                                             "$scroll_track_image_control": "netease_editor_template_namespace.scroll_track_image",
                                                                                             "$scroll_track_texture": "textures/ui/ScrollRail",
-                                                                                            "$scrolling_content": "modsetnacalgungun.gdlb",
+                                                                                            "$scrolling_content": "modsetnacalset2.gdlb",
                                                                                             "$show_background": true,
                                                                                             "$track_nine_slice_buttom": 0,
                                                                                             "$track_nine_slice_left": 0,
@@ -568,7 +568,7 @@
                                                         "$scroll_box_touch_image_control": "netease_editor_template_namespace.scroll_box_image",
                                                         "$scroll_track_image_control": "netease_editor_template_namespace.scroll_track_image",
                                                         "$scroll_track_texture": "textures/ui/set_hg",
-                                                        "$scrolling_content": "modsetnacalgungun.gdlb",
+                                                        "$scrolling_content": "modsetnacalset2.gdlb",
                                                         "$show_background": true,
                                                         "$track_nine_slice_buttom": 0,
                                                         "$track_nine_slice_left": 0,
@@ -1181,7 +1181,7 @@
                                                                     ],
                                                                     "clip_direction": "left",
                                                                     "clip_ratio": 0.0,
-                                                                    "texture": "textures/item/chalkboard/chalkboard_large"
+                                                                    "texture": "textures/ui/set_lb_test"
                                                                 }
                                                             }
                                                         ]
@@ -1458,11 +1458,11 @@
         "type": "screen",
         "controls": [
             {
-                "gdlb@modsetnacalgungun.gdlb": {}
+                "gdlb@modsetnacalset2.gdlb": {}
             }
         ]
     },
-    "namespace": "modsetnacalgungun",
+    "namespace": "modsetnacalset2",
     "slider_bj1": {
         "type": "image",
         "layer": 1,

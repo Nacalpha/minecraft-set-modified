@@ -14,7 +14,7 @@ class abcdemodset(object):
 
     @Mod.InitServer()
     def MuSeZhenbanServerInit(self):
-        print("===== init nacalgungun server =====")
+        print("===== init nacalset2 server =====")
         # 函数可以将System注册到服务端引擎中，实例的创建和销毁交给引擎处理。第一个参数是MOD名称，第二个是System名称，第三个是自定义MOD System类的路径
         # 取名名称尽量个性化，不能与其他人的MOD冲突，可以使用英文、拼音、下划线这三。
         sys = serverApi.GetSystem(modConfig.ModName, modConfig.ModName + "tem")
@@ -31,12 +31,12 @@ class abcdemodset(object):
 
     @Mod.DestroyServer()
     def MuSeZhenbanServerDestroy(self):
-        print("===== destroy nacalgungun server =====")
+        print("===== destroy nacalset2 server =====")
 
     # InitClient绑定的函数作为客户端脚本初始化的入口函数，通常用来注册客户端系统system和组件component
     @Mod.InitClient()
     def MuSeZhenbanClientInit(self):
-        print("===== init nacalgungun client =====")
+        print("===== init nacalset2 client =====")
         # 函数可以将System注册到客户端引擎中，实例的创建和销毁交给引擎处理。第一个参数是MOD名称，第二个是System名称，第三个是自定义MOD System类的路径
         # 取名名称尽量个性化，不能与其他人的MOD冲突，可以使用英文、拼音、下划线三种。
         sys = clientApi.GetSystem(modConfig.ModName,
@@ -55,4 +55,4 @@ class abcdemodset(object):
     # DestroyClient绑定的函数作为客户端脚本退出的时候执行的析构函数，通常用来反注册一些内容,可为空
     @Mod.DestroyClient()
     def MuSeZhenbanClientDestroy(self):
-        print("===== destroy nacalgungun client =====")
+        print("===== destroy nacalset2 client =====")

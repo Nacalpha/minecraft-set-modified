@@ -2,7 +2,7 @@
 # 这个文件保存了MOD中使用的一些变量，这样做的好处很多，建议参考
 
 # Mod Version
-ModName = "set_nacalgungun"
+ModName = "set_nacalset2"
 ModVersion = "0.0.1"
 
 # Engine
@@ -13,6 +13,6 @@ Minecraft = "Minecraft"
 TemplateUIPyClsPath = ModName+"_py.templateUI.TemplateUI"
 TemplateUIScreenDef = ".main"'''
 
-TemplateUIName = "modsetnacalgungun"
+TemplateUIName = "modsetnacalset2"
 TemplateUIPyClsPath = ModName + "_py.ui1.TemplateUI"
-TemplateUIScreenDef = "modsetnacalgungun.main"
+TemplateUIScreenDef = "modsetnacalset2.main"

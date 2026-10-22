@@ -8,10 +8,10 @@ from mod_log import logger as logger
 ServerSystem = serverApi.GetServerSystemCls()
 
 
-class set_nacalgungunse(ServerSystem):
+class set_nacalset2se(ServerSystem):
 
     def __init__(self, namespace, systemName):
-        super(set_nacalgungunse, self).__init__(namespace, systemName)
+        super(set_nacalset2se, self).__init__(namespace, systemName)
         self.ListenEvent()
         self.levelid = serverApi.GetLevelId()
 
