@@ -1,0 +1,83 @@
+{
+   "main" : {
+      "controls" : [
+         {
+            "panel_set@xlk_button.panel_set" : {}
+         }
+      ],
+      "type" : "screen"
+   },
+   "namespace" : "xlk_button",
+   "panel_set" : {
+      "controls" : [
+         {
+            "button@common.button" : {
+               "$control_alpha" : 1.0,
+               "$default_texture" : "textures/netease/download/btn01@3x",
+               "$hover_texture" : "textures/netease/download/btn01_click@3x",
+               "$is_new_nine_slice" : false,
+               "$label_color" : [ 0.2980392156862745, 0.2980392156862745, 0.2980392156862745 ],
+               "$label_font_scale_factor" : 1.0,
+               "$label_font_size" : "normal",
+               "$label_layer" : 3,
+               "$label_offset" : [ 0, 0 ],
+               "$label_text" : "模组配置",
+               "$nine_slice_buttom" : 0,
+               "$nine_slice_left" : 0,
+               "$nine_slice_right" : 0,
+               "$nine_slice_top" : 0,
+               "$nineslice_size" : [ 3.0, 3.0, 3.0, 3.0 ],
+               "$pressed_button_name" : "%netease_editor_template_namespace.click",
+               "$pressed_texture" : "textures/netease/download/btn01_click@3x",
+               "$texture_layer" : 2,
+               "bindings" : [
+                  {
+                     "binding_collection_name" : "",
+                     "binding_condition" : "always_when_visible",
+                     "binding_type" : "collection_details"
+                  }
+               ],
+               "button_mappings" : [],
+               "controls" : [
+                  {
+                     "default@netease_editor_template_namespace.default" : {}
+                  },
+                  {
+                     "hover@netease_editor_template_namespace.hover" : {}
+                  },
+                  {
+                     "pressed@netease_editor_template_namespace.pressed" : {}
+                  },
+                  {
+                     "button_label@netease_editor_template_namespace.button_label" : {
+                        "font_type" : "default"
+                     }
+                  },
+                  {
+                     "image" : {
+                        "anchor_from" : "left_middle",
+                        "anchor_to" : "left_middle",
+                        "clip_direction" : "left",
+                        "clip_ratio" : 0.0,
+                        "layer" : 10,
+                        "offset" : [ 6, 0.0 ],
+                        "size" : [ 20, 20 ],
+                        "texture" : "textures/ui/settings_glyph_color_2x",
+                        "type" : "image"
+                     }
+                  }
+               ],
+               "default_control" : "default",
+               "hover_control" : "hover",
+               "is_handle_button_move_event" : true,
+               "pressed_control" : "pressed",
+               "type" : "button"
+            }
+         }
+      ],
+      "layer" : 1,
+      "size" : [ 96, 32 ],
+      "type" : "panel",
+      "visible" : false
+   }
+}

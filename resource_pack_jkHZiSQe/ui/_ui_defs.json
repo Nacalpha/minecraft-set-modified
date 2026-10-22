@@ -1,0 +1,7 @@
+{
+    "ui_defs": [
+        "ui/modsetnacalgungun.json",
+        "ui/xlk_button.json",
+        "ui/netease_editor_template_namespace.json"
+    ]
+}
