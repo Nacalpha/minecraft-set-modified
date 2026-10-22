@@ -1,0 +1,12 @@
+# Mod Studio 生成的本地文件，含账号、昵称、本机路径等个人信息，不要提交
+studio.json
+work.mcscfg
+editor.name
+
+# Mod Studio 的本地缓存（编辑器截图、保存状态等）
+.mcs/
+
+# 打包产物
+*.zip
+*.mcpack
+*.mcaddon
