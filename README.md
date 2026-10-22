@@ -74,6 +74,4 @@ resource_pack_jkHZiSQe/
 - 脚本写入不检查 `need_op_level`（界面交互才检查）。要按权限限制，自己在调用前判断。
 - 只支持改「选中值」，不支持运行时增删下拉框的选项。
 
-## 关于仓库
 
-Mod Studio 生成的 `studio.json`、`work.mcscfg`、`.mcs/` 里有账号、昵称、本机路径，已经写进 `.gitignore` 并从版本库移除，不要提交。
