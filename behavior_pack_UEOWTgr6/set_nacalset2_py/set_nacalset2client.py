@@ -86,6 +86,10 @@ class set_nacalset2cl(ClientSystem):
         self.srk_data = {}
         self.hdt_data = {}
         self.uiNode1 = None
+        # 界面注册是否成功。UI 资源没加载完时 RegisterUI 会失败，
+        # 此时调 GetUI / PushScreen 引擎会刷 get_screen_def error，
+        # 所有取界面的地方都要先看这个标志
+        self.ui_registered = False
         # 当前打开的分类，没打开时为 None。外部改设置时靠它判断要不要重画
         self.mod_id = None
         self.class_id = None
@@ -127,15 +131,43 @@ class set_nacalset2cl(ClientSystem):
         self.world_state = args
 
     def UiInitFinished(self, args):
-        clientApi.RegisterUI(modConfig.ModName, modConfig.TemplateUIName,
-                             modConfig.TemplateUIPyClsPath,
-                             modConfig.TemplateUIScreenDef)
+        # UiInitFinished 可能早于界面资源加载完就触发，注册失败要等下一次再试，
+        # 不能把 ui_registered 直接置 True
+        self.RegisterSettingUI()
         if self.start == False:
             self.start = True
             comp = clientApi.GetEngineCompFactory().CreateGame(self.levelid)
             comp.AddRepeatedTimer(0.1, self.get_hdt_data)
 
+    def RegisterSettingUI(self):
+        """注册设置界面。成功返回 True，界面资源还没就绪时返回 False"""
+        if self.ui_registered:
+            return True
+        try:
+            ok = clientApi.RegisterUI(modConfig.ModName,
+                                      modConfig.TemplateUIName,
+                                      modConfig.TemplateUIPyClsPath,
+                                      modConfig.TemplateUIScreenDef)
+        except Exception as e:
+            print("[设置] 注册设置界面失败：%s" % e)
+            return False
+        # 老版本接口没有返回值（None），只有明确返回 False 才算失败
+        if ok is not None and not ok:
+            print("[设置] 设置界面资源还没加载完，等下次 UiInitFinished 再注册")
+            return False
+        self.ui_registered = True
+        return True
+
+    def IsUIRegistered(self):
+        """界面是否已经注册成功。没注册成功前不要调 GetUI / PushScreen"""
+        return self.ui_registered
+
     def dk(self, args):
+        # 没注册成功就去 PushScreen 会让引擎刷 get_screen_def error，
+        # 这里先补一次注册，还不行就直接返回
+        if not self.RegisterSettingUI():
+            print("[设置] 设置界面还没注册好，这次不打开")
+            return
         if clientApi.GetPlatform() == 0 and clientApi.IsTouchWithMouse(
         ) == False:
             self.sta = 'stack_'

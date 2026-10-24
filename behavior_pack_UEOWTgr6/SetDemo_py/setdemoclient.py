@@ -41,15 +41,18 @@ class SetDemoClient(ClientSystem):
         self.tick += 1
         if self.tick % 5 != 0:
             return
+        sys = self.GetSetSystem()
+        # 设置界面还没注册成功时不要调 GetUI：那会让引擎每 5 tick 刷一次
+        # get_screen_def error（界面定义还没加载完），等注册好了再看
+        if sys is None or not sys.IsUIRegistered():
+            self.last_settings = None
+            return
         # GetUI 拿得到节点说明设置界面正开着，拿不到就别轮询了
         uiNode = clientApi.GetUI(demo_config.SetModName,
                                  demo_config.SetTemplateUIName)
         if uiNode is None:
             # 顺手把快照清掉，下次打开界面重新采一次基准
             self.last_settings = None
-            return
-        sys = self.GetSetSystem()
-        if sys is None:
             return
         current = sys.GetSettings(demo_config.DemoModId)
         if self.last_settings is None:
