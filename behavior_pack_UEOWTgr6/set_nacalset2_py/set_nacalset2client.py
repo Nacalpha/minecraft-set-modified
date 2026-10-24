@@ -997,7 +997,7 @@ class set_nacalset2cl(ClientSystem):
             if control is None:
                 return False
             content = control.asScrollView().GetScrollViewContentPath()
-            print("[设置] 取滚动列表路径成功：%s" % content)
+            # print("[设置] 取滚动列表路径成功：%s" % content)
         except Exception as e:
             print("[设置] 取滚动列表路径失败：%s" % e)
             return False
