@@ -21,7 +21,7 @@
 
 写入会做校验：数字夹到 `min`/`max`、按 `step` 对齐、超出 `max_length` 截断、下拉框认 key 也认显示文字（颜色码 `§x` 会忽略）。
 
-**能接官方设置界面的写法。** `setting_shim.py` 把官方 `SettingInst` 的方法（`AddSlider` / `AddDropDown` / `AddButton` / `GetSliderValue` / `SetSliderValue` / `GetDropDownValue` / `SetDropDownValue` / `CloseSettingUI`）实现了一遍，底下转到本模块。原来用官方设置界面的模组，改几行就能换过来，设置表和换算逻辑不用动。
+**能接官方设置界面的写法。** `setting_shim.py` 把官方 `SettingInst` 的方法（`AddSlider` / `AddDropDown` / `AddButton` / `GetSliderValue` / `SetSliderValue` / `GetDropDownValue` / `SetDropDownValue` / `CloseSettingUI`）实现了一遍，底下转到本模块。原来用官方设置界面的模组，改几行就能换过来，设置表和换算逻辑不用动。`Poll()` 还自带「界面开着才比对」的闸门，见下面「轮询的约定」。
 
 ## 修了什么问题
 
@@ -30,6 +30,7 @@
 3. **首次读配置崩**。`GetConfigData` 在没写过数据时返回 `None`，原版 `reload_set_data` 直接拿它当字典用，会崩。现在统一成空字典。
 4. **权限未同步时崩**。界面早于服务端权限推送打开时，`world_state` 还没赋值，原版会 AttributeError。现在有默认值。
 5. **写入和滑条轮询打架**。滑条每 0.1 秒读一次控件读数，外部写值后如果不同步缓存，轮询会把这当成玩家拖动再处理一遍（多一次保存和重画）。现在写值时同步缓存。
+6. **`Poll()` 空转**。`setting_shim.Poll()` 原来不管界面开没开都取一遍设置再比较，设置项多的模组每 5 帧白做几次 `GetSettings`（四个存储位深拷贝再合并）。现在界面关着时直接返回，只在界面从「开」变「关」的那一次补比对，见下面「轮询的约定」。
 
 ## 目录
 
@@ -64,6 +65,20 @@ resource_pack_jkHZiSQe/
 
 自己写模组时照 `setdemoclient.py` 抄：轮询看 `OnScriptTickClient`，写值看 `OnDemoWrite`。
 
+## 轮询的约定（走 `setting_shim.py` 时）
+
+`SettingShim.Poll()` 自带界面闸门，调用方每帧 / 每几帧调一次就行，**不用自己判断界面开没开**（`SetDemo_py` 里那句 `GetUI(...) is None` 是「手写轮询」的版本，走适配器时闸门已经在 `Poll()` 里了）：
+
+| 情况 | `Poll()` 的行为 |
+|---|---|
+| 界面开着 | 正常比对（`GetSettings` + 和上次快照逐键比较），有变化就回调 |
+| 界面从「开」变「关」的那一次 | 仍然比对一遍，把关闭前最后几帧的改动吃掉 |
+| 界面一直关着 | 直接返回，**连 `GetSettings` 都不调用** |
+
+为什么可以这么关：设置项的值只可能在界面上被改（拖滑条 / 选下拉 / 输文本 / 拨开关 / 重置），而滑条、输入框这些控件的数据在 `gb_ui()` 里就清空了；模组自己程序化写控件（`SetSliderValue` / `SetDropDownValue`）会同步快照，本来就不会回调。
+
+**唯一要注意的**：界面关着的时候用 `SetSetting` / `ApplySettingsDict` 从外部改值，`Poll()` 是看不到的（它不比对）。要么打开界面让下一次 `Poll()` 补上，要么直接调用模组自己的滑块 / 下拉回调。
+
 ## 其他要注意的
 
 - 游戏内脚本是 **Python 2.7**，所有 `.py` 首行必须是 `# -*- coding: utf-8 -*-`，文件存 UTF-8 无 BOM。
@@ -73,5 +88,6 @@ resource_pack_jkHZiSQe/
 - 滚动列表用的是 `common.scrolling_panel` 模板，取路径靠它。换自己的 UI 时如果把这层模板换了，会退回旧拼法（手柄仍然不可用）。
 - 脚本写入不检查 `need_op_level`（界面交互才检查）。要按权限限制，自己在调用前判断。
 - 只支持改「选中值」，不支持运行时增删下拉框的选项。
+- **界面关着时轮询不比对**（见「轮询的约定」）。界面关着用 `SetSetting` 改的值，要等下次打开界面才可能被 `Poll()` 发现；脚本改完想让模组立刻响应，就直接调模组自己的回调。
 
 

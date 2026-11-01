@@ -14,7 +14,8 @@
 #   * Add* 只记录控件规格，最后转成设置表交给设置模块，界面由设置模块画；
 #   * Get/Set 走设置模块的 GetSetting / SetSetting；
 #   * 官方界面改值会回调，这边靠 Poll() 轮询发现变化再回调，所以每帧/每几帧
-#     要调一次 Poll()；
+#     要调一次 Poll()（Poll 内部自带闸门：设置界面关着时直接返回，见 Poll 的
+#     注释，所以调用方不用自己判断界面开没开）；
 #   * CloseSettingUI() 换成 CloseUI()。
 #
 # 值的形态和官方一致：滑块是 0..max 的整数读数，下拉是选项的 0 基下标。
@@ -40,6 +41,11 @@ class SettingShim(object):
         self.button_callbacks = {}
         self.last_values = {}
         self.registered = False
+        # 上一次轮询时设置界面是否打开（见 Poll）：
+        #   * 界面一直关着 -> 轮询直接跳过，不做 GetSettings / 比较；
+        #   * 界面从「开」变「关」的那一次 -> 仍然比对一遍，把最后几帧的改动吃掉；
+        #   * 界面开着 -> 正常比对。
+        self.was_open = False
 
     # ---------- 注册控件（链式，跟官方一样返回 self） ----------
 
@@ -187,9 +193,35 @@ class SettingShim(object):
     # ---------- 轮询界面改动 ----------
 
     def Poll(self):
-        """把设置界面上的改动转成回调。官方界面会主动回调，这边只能自己查。"""
+        """把设置界面上的改动转成回调。官方界面会主动回调，这边只能自己查。
+
+        【只在设置界面打开期间真正比对】设置项的值只可能在设置界面上被改
+        （拖滑条 / 选下拉 / 输文本 / 拨开关 / 重置），界面关着时每几帧做一次
+        GetSettings + 深拷贝比较纯属空转，所以这里加了一道闸门：
+
+          * 界面关着、上一次也是关着 -> 直接返回，连 GetSettings 都不做；
+          * 界面关着、上一次是开着的 -> 仍然比对一次（把关闭前最后几帧的改动
+            吃掉），之后才进入跳过状态；
+          * 界面开着 -> 正常比对。
+
+        调用方照旧每帧 / 每几帧调一次就行，不用自己判断界面开没开（
+        `SetDemo_py/setdemoclient.py` 里那句「界面开着才轮询」是手写版本，
+        走本适配器时闸门已经在这里了）。
+
+        模组自己程序化写控件（SetSliderValue / SetDropDownValue）不走这里 ——
+        那条路会同步 last_values，本来就不会回调。以后如果要在界面关着的时候
+        从外部改设置（SetSetting / ApplySettingsDict），要么打开界面让 Poll
+        发现，要么直接调用模组自己的回调，别指望轮询。
+        """
         if not self._EnsureRegistered():
             return
+
+        is_open = self.IsOpen()
+        if not is_open and not self.was_open:
+            return
+        # 记住这次看到的状态：开 -> 关的那一次要放行，关 -> 关才跳过
+        self.was_open = is_open
+
         current = self.setsys.GetSettings(self.mod_id)
         if not self.last_values:
             self.last_values = current
